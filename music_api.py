@@ -60,7 +60,7 @@ def get_current_user(
     return user
     
 
-@api.post("/api/signup")
+@api.post("/signup")
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
@@ -76,7 +76,7 @@ class LoginData(BaseModel):
     username: str
     password: str
 
-@api.post("/api/login")
+@api.post("/login")
 def login(data: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == data.username).first()
     if not db_user or not verify_password(data.password, db_user.hashed_password):
@@ -85,15 +85,15 @@ def login(data: schemas.UserCreate, db: Session = Depends(get_db)):
     return {"access_token": token, "token_type": "bearer"}
 
 
-@api.get("/api/me")
+@api.get("/me")
 def read_users_me(current_user: models.User = Depends(get_current_user)):
     return {"username": current_user.username, "id": current_user.id}
 
-@api.get("/api/artists")
+@api.get("/artists")
 def get_artists(db: Session = Depends(get_db)):
     return db.query(models.Artist).all()
 
-@api.post("/api/artists")
+@api.post("/artists")
 def create_artist(artist: schemas.ArtistCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_artist = models.Artist(name=artist.name)
     db.add(db_artist)
@@ -101,11 +101,11 @@ def create_artist(artist: schemas.ArtistCreate, db: Session = Depends(get_db), c
     db.refresh(db_artist)
     return db_artist
 
-@api.get("/api/songs")
+@api.get("/songs")
 def get_songs(db: Session = Depends(get_db)):
     return db.query(models.Song).all()
 
-@api.post("/api/songs")
+@api.post("/songs")
 def add_song(song: schemas.SongCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     artist = db.query(models.Artist).filter(models.Artist.id == song.artist_id).first()
     if not artist:
@@ -116,11 +116,11 @@ def add_song(song: schemas.SongCreate, db: Session = Depends(get_db), current_us
     db.refresh(new_song)
     return new_song
 
-@api.get("/api/playlists")
+@api.get("/playlists")
 def get_playlists(db: Session = Depends(get_db)):
     return db.query(models.Playlist).all()
 
-@api.post("/api/playlists")
+@api.post("/playlists")
 def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_playlist = models.Playlist(name=playlist.name, owner_id=current_user.id)
     db.add(db_playlist)
