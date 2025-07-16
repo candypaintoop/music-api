@@ -4,43 +4,34 @@ class UserCreate(BaseModel):
     username: str
     password: str
 
-class UserLogin(BaseModel):
-    username: str
-    password: str
+class ArtistCreate(BaseModel):
+    name: str
 
-class SongBase(BaseModel):
+class SongCreate(BaseModel):
     title: str
     artist_id: int
 
-class SongCreate(SongBase):
-    pass
+class PlaylistCreate(BaseModel):
+    name: str
 
-class Song(SongBase):
+class Artist(BaseModel):
     id: int
+    name: str
 
     class Config:
         from_attributes = True
 
-class ArtistBase(BaseModel):
-    name: str
-
-class ArtistCreate(ArtistBase):
-    pass
-
-class Artist(ArtistBase):
+class Song(BaseModel):
     id: int
+    title: str
+    artist_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
-class PlaylistBase(BaseModel):
+class Playlist(BaseModel):
+    id: int
     name: str
 
-class PlaylistCreate(PlaylistBase):
-    pass
-
-class Playlist(PlaylistBase):
-    id: int
-
     class Config:
-        orm_mode = True
+        from_attributes = True

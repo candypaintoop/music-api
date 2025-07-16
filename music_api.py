@@ -1,43 +1,27 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-from jose import jwt
+from jose import jwt, JWTError
 from datetime import datetime, timedelta
-
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.errors import RateLimitExceeded
-
-from fastapi.responses import JSONResponse
-
+from fastapi.staticfiles import StaticFiles
+from fastapi import APIRouter
+from pydantic import BaseModel
 import models, schemas
 from database import SessionLocal, engine, Base
 
-# Create DB tables
 Base.metadata.create_all(bind=engine)
 
-# ✅ Init app & limiter
-app = FastAPI(title="Music API with JWT Auth + Rate Limiting")
-
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_middleware(SlowAPIMiddleware)
-
-@app.exception_handler(RateLimitExceeded)
-async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(
-        status_code=429,
-        content={"detail": "Rate limit exceeded. Slow down!"},
-    )
+app = FastAPI(title="Music API with JWT Auth")
+app.mount("/", StaticFiles(directory=".", html=True), name="static")
+api = APIRouter()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 SECRET_KEY = "supersecretkey"
 ALGORITHM = "HS256"
 
-# Dependency
+bearer_scheme = HTTPBearer()
+
 def get_db():
     db = SessionLocal()
     try:
@@ -58,10 +42,26 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-# ✅ SIGNUP with rate limit
-@app.post("/signup")
-@limiter.limit("5/minute")
-def signup(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db)
+):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+    
+
+@api.post("/signup")
+def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -72,32 +72,40 @@ def signup(request: Request, user: schemas.UserCreate, db: Session = Depends(get
     db.refresh(new_user)
     return {"message": "User created successfully"}
 
-# ✅ LOGIN with rate limit
-@app.post("/login")
-@limiter.limit("10/minute")
-def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.username == form_data.username).first()
-    if not db_user or not verify_password(form_data.password, db_user.hashed_password):
+class LoginData(BaseModel):
+    username: str
+    password: str
+
+@api.post("/login")
+def login(data: LoginData, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.username == data.username).first()
+    if not db_user or not verify_password(data.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token(data={"sub": db_user.username})
     return {"access_token": token, "token_type": "bearer"}
 
-# ✅ ARTIST CRUD
-@app.post("/artists")
-def create_artist(artist: schemas.ArtistCreate, db: Session = Depends(get_db)):
+@api.get("/me")
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    return {"username": current_user.username, "id": current_user.id}
+
+@api.get("/artists")
+def get_artists(db: Session = Depends(get_db)):
+    return db.query(models.Artist).all()
+
+@api.post("/artists")
+def create_artist(artist: schemas.ArtistCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_artist = models.Artist(name=artist.name)
     db.add(db_artist)
     db.commit()
     db.refresh(db_artist)
     return db_artist
 
-@app.get("/artists")
-def get_artists(db: Session = Depends(get_db)):
-    return db.query(models.Artist).all()
+@api.get("/songs")
+def get_songs(db: Session = Depends(get_db)):
+    return db.query(models.Song).all()
 
-# ✅ SONG CRUD
-@app.post("/songs")
-def add_song(song: schemas.SongCreate, db: Session = Depends(get_db)):
+@api.post("/songs")
+def add_song(song: schemas.SongCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     artist = db.query(models.Artist).filter(models.Artist.id == song.artist_id).first()
     if not artist:
         raise HTTPException(status_code=404, detail="Artist not found")
@@ -107,19 +115,19 @@ def add_song(song: schemas.SongCreate, db: Session = Depends(get_db)):
     db.refresh(new_song)
     return new_song
 
-@app.get("/songs")
-def get_songs(db: Session = Depends(get_db)):
-    return db.query(models.Song).all()
+@api.get("/playlists")
+def get_playlists(db: Session = Depends(get_db)):
+    return db.query(models.Playlist).all()
 
-# ✅ PLAYLIST CRUD
-@app.post("/playlists")
-def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_db)):
-    db_playlist = models.Playlist(name=playlist.name)
+@api.post("/playlists")
+def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_playlist = models.Playlist(name=playlist.name, owner_id=current_user.id)
     db.add(db_playlist)
     db.commit()
     db.refresh(db_playlist)
     return db_playlist
 
-@app.get("/playlists")
-def read_playlists(db: Session = Depends(get_db)):
-    return db.query(models.Playlist).all()
+
+app.include_router(api, prefix="/api")
+
+
