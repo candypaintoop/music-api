@@ -60,7 +60,7 @@ def get_current_user(
     return user
     
 
-@api.post("/signup")
+@api.post("/api/signup")
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
@@ -76,23 +76,24 @@ class LoginData(BaseModel):
     username: str
     password: str
 
-@api.post("/login")
-def login(data: LoginData, db: Session = Depends(get_db)):
+@api.post("/api/login")
+def login(data: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == data.username).first()
     if not db_user or not verify_password(data.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token(data={"sub": db_user.username})
     return {"access_token": token, "token_type": "bearer"}
 
-@api.get("/me")
+
+@api.get("/api/me")
 def read_users_me(current_user: models.User = Depends(get_current_user)):
     return {"username": current_user.username, "id": current_user.id}
 
-@api.get("/artists")
+@api.get("/api/artists")
 def get_artists(db: Session = Depends(get_db)):
     return db.query(models.Artist).all()
 
-@api.post("/artists")
+@api.post("/api/artists")
 def create_artist(artist: schemas.ArtistCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_artist = models.Artist(name=artist.name)
     db.add(db_artist)
@@ -100,11 +101,11 @@ def create_artist(artist: schemas.ArtistCreate, db: Session = Depends(get_db), c
     db.refresh(db_artist)
     return db_artist
 
-@api.get("/songs")
+@api.get("/api/songs")
 def get_songs(db: Session = Depends(get_db)):
     return db.query(models.Song).all()
 
-@api.post("/songs")
+@api.post("/api/songs")
 def add_song(song: schemas.SongCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     artist = db.query(models.Artist).filter(models.Artist.id == song.artist_id).first()
     if not artist:
@@ -115,11 +116,11 @@ def add_song(song: schemas.SongCreate, db: Session = Depends(get_db), current_us
     db.refresh(new_song)
     return new_song
 
-@api.get("/playlists")
+@api.get("/api/playlists")
 def get_playlists(db: Session = Depends(get_db)):
     return db.query(models.Playlist).all()
 
-@api.post("/playlists")
+@api.post("/api/playlists")
 def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_playlist = models.Playlist(name=playlist.name, owner_id=current_user.id)
     db.add(db_playlist)
