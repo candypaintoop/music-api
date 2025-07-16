@@ -13,7 +13,7 @@ from database import SessionLocal, engine, Base
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Music API with JWT Auth")
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
 api = APIRouter()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
