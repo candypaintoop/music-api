@@ -33,4 +33,10 @@ A secure RESTful Music API:
 ## 🧪 Tests
 Run locally:
 ```bash
+<<<<<<< HEAD
+=======
+
+## Postman Collection
+Test all endpoints 👉 [MusicAPI.postman_collection.json](./MusicAPI.postman_collection.json)
+>>>>>>> 9bb975b4527d8e2754d6dd28d248357067bfcac8
 pytest test_main.py
