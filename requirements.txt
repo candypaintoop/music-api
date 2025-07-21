@@ -3,4 +3,6 @@ uvicorn
 sqlalchemy
 passlib[bcrypt]
 python-jose
-pytest
+slowapi
+pydantic
+mutagen

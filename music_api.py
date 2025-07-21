@@ -9,6 +9,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 import models, schemas
 from database import SessionLocal, engine, Base
+from fastapi import UploadFile, File
+from mutagen.mp3 import MP3
 
 Base.metadata.create_all(bind=engine)
 
@@ -127,6 +129,45 @@ def create_playlist(playlist: schemas.PlaylistCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(db_playlist)
     return db_playlist
+
+@api.post("/upload")
+def upload_mp3(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    if not file.filename.endswith(".mp3"):
+        raise HTTPException(status_code=400, detail="Only MP3 files allowed")
+    
+    contents = file.file.read()
+    temp_file = f"temp_{file.filename}"
+    with open(temp_file, "wb") as f:
+        f.write(contents)
+    
+    audio = MP3(temp_file)
+    title = file.filename
+    duration = audio.info.length
+
+    # For demo: create dummy Artist if needed
+    artist = db.query(models.Artist).first()
+    if not artist:
+        artist = models.Artist(name="Unknown Artist")
+        db.add(artist)
+        db.commit()
+        db.refresh(artist)
+
+    # Save Song with metadata
+    new_song = models.Song(title=title, artist_id=artist.id)
+    db.add(new_song)
+    db.commit()
+    db.refresh(new_song)
+
+    # Clean up temp file
+    import os
+    os.remove(temp_file)
+
+    return {
+        "filename": file.filename,
+        "duration_seconds": duration,
+        "artist_id": artist.id,
+        "song_id": new_song.id
+    }
 
 
 app.include_router(api, prefix="/api")
